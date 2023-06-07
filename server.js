@@ -21,6 +21,8 @@ const methodOverride = require('method-override')
 // Initialize Express (a web framework for Node.js)
 const app = express();
 
+app.locals.PUBLIC_STRIPE_API_KEY = process.env.PUBLIC_STRIPE_API_KEY
+
 // Set up Mongoose
 const mongoose = require('mongoose');
 mongoose.connect('mongodb://localhost/local', {
