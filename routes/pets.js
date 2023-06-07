@@ -3,7 +3,7 @@ const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
 const Upload = require('s3-uploader');
 
-const client = new Upload(process.env.S3_BUCKET,{
+const client = new Upload(process.env.S3_BUCKET, {
   aws: {
     path: 'pets/avatar',
     region: process.env.S3_REGION,
@@ -121,6 +121,47 @@ module.exports = (app) => {
   app.delete('/pets/:id', (req, res) => {
     Pet.findByIdAndRemove(req.params.id).exec((err, pet) => {
       return res.redirect('/')
+    });
+  });
+
+  //PURCHASE PET
+  app.post('/pets/:id/purchase', (req, res) => {
+    console.log(req.body);
+
+    const stripe = require("stripe")(process.env.PRIVATE_STRIPE_API_KEY);
+
+    // Token is created using Checkout or Elements!
+    // Get the payment token ID submitted by the form:
+    const token = req.body.stripeToken; // Using Express
+
+    // req.body.petId can become null through seeding,
+    // this way we'll insure we use a non-null value
+    let petId = req.body.petId || req.params.id;
+
+    Pet.findById(petId).exec((err, pet) => {
+      if (err) {
+        console.log('Error: ' + err);
+        res.redirect(`/pets/${req.params.id}`);
+      }
+      const charge = stripe.charges.create({
+        amount: pet.price * 100,
+        currency: 'usd',
+        description: `Purchased ${pet.name}, ${pet.species}`,
+        source: token,
+      }).then((chg) => {
+        // Mark the pet as purchased with the current date and time
+        pet.purchasedAt = Date.now();
+        pet.save((err) => {
+          if (err) {
+            console.log('Error: ' + err);
+            res.redirect(`/pets/${req.params.id}`);
+          }
+          res.redirect(`/pets/${req.params.id}`);
+        });
+      })
+      .catch(err => {
+        console.log('Error:' + err);
+      });
     });
   });
 }
