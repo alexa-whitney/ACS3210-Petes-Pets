@@ -1,3 +1,7 @@
+// MODELS
+const Pet = require('../models/pet');
+const mailer = require('../utils/mailer');
+
 // UPLOADING TO AWS S3
 const multer = require('multer');
 const upload = multer({ dest: 'uploads/' });
@@ -24,9 +28,6 @@ const client = new Upload(process.env.S3_BUCKET, {
     suffix: '-square'
   }]
 });
-
-// MODELS
-const Pet = require('../models/pet');
 
 // PET ROUTES
 module.exports = (app) => {
@@ -124,7 +125,7 @@ module.exports = (app) => {
     });
   });
 
-  //PURCHASE PET
+  // PURCHASE PET
   app.post('/pets/:id/purchase', (req, res) => {
     console.log(req.body);
 
@@ -135,33 +136,38 @@ module.exports = (app) => {
     const token = req.body.stripeToken; // Using Express
 
     // req.body.petId can become null through seeding,
-    // this way we'll insure we use a non-null value
+    // this way we'll ensure we use a non-null value
     let petId = req.body.petId || req.params.id;
 
     Pet.findById(petId).exec((err, pet) => {
       if (err) {
         console.log('Error: ' + err);
-        res.redirect(`/pets/${req.params.id}`);
+        return res.redirect(`/pets/${req.params.id}`);
       }
       const charge = stripe.charges.create({
         amount: pet.price * 100,
         currency: 'usd',
         description: `Purchased ${pet.name}, ${pet.species}`,
         source: token,
-      }).then((chg) => {
-        // Mark the pet as purchased with the current date and time
-        pet.purchasedAt = Date.now();
-        pet.save((err) => {
-          if (err) {
-            console.log('Error: ' + err);
-            res.redirect(`/pets/${req.params.id}`);
-          }
-          res.redirect(`/pets/${req.params.id}`);
-        });
       })
-      .catch(err => {
-        console.log('Error:' + err);
-      });
+        .then((chg) => {
+          // Convert the amount back to dollars for ease in displaying in the template
+          const user = {
+            email: req.body.stripeEmail,
+            amount: chg.amount / 100,
+            petName: pet.name
+          };
+          // Call our mail handler to manage sending emails
+          mailer.sendMail(user, req, res);
+        })
+        .catch(err => {
+          console.log('Error: ' + err);
+          return res.redirect(`/pets/${req.params.id}`);
+        });
+
+      // Mark the pet as purchased with the current date and time
+      pet.purchasedAt = Date.now();
+      pet.save();
     });
   });
 }
